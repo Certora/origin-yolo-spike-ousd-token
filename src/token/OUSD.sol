@@ -46,6 +46,9 @@ contract OUSD is Governable {
     mapping(address => uint256) public nonRebasingCreditsPerToken;
     mapping(address => RebaseOptions) public rebaseState;
     mapping(address => uint256) public isUpgraded;
+    mapping(address => address) public yieldDelegate;
+    mapping(address => uint256) public yieldDelegateeCount;
+    mapping(address => uint256) public aintMoney;
 
     uint256 private constant RESOLUTION_INCREASE = 1e9;
 
@@ -127,7 +130,6 @@ contract OUSD is Governable {
         view
         returns (uint256)
     {
-        if (_creditBalances[_account] == 0) return 0;
         return
             _creditBalances[_account] * 1e18 / _creditsPerToken(_account);
     }
@@ -582,7 +584,7 @@ contract OUSD is Governable {
             : _newTotalSupply;
 
         _rebasingCreditsPerToken = _rebasingCredits 
-            * 1e18 / _totalSupply - nonRebasingSupply;
+            * 1e18 / (_totalSupply - nonRebasingSupply);
 
         require(_rebasingCreditsPerToken > 0, "Invalid change in supply");
 
@@ -594,5 +596,25 @@ contract OUSD is Governable {
             _rebasingCredits,
             _rebasingCreditsPerToken
         );
+    }
+
+    function delegateYield(address from, address to) external onlyGovernor() {
+        require(from != to, "Cannot delegate to self");
+        require(yieldDelegateeCount[from] == 0, "Cannot delegate from delegatee");
+        require(yieldDelegate[to] == address(0), "Cannot delegate to delegator");
+        require(yieldDelegate[from] == address(0), "Already delegated");
+        require(!_isNonRebasingAccount(to), "Must delegate to a rebasing account");
+        require(_isNonRebasingAccount(from), "Must delegate from a non-rebasing account");
+        
+        yieldDelegate[from] = to;
+        rebaseState[from] = RebaseOptions.OptIn;
+        rebaseState[to] = RebaseOptions.OptIn;
+        yieldDelegateeCount[to] += 1;
+    }
+
+    function undelegateYield(address from) external onlyGovernor() {
+        require(yieldDelegate[from] != address(0), "");
+        yieldDelegateeCount[yieldDelegate[from]] -= 1;
+        yieldDelegate[from] = address(0);
     }
 }
