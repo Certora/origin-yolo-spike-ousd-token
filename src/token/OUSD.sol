@@ -54,7 +54,7 @@ contract OUSD is Governable {
         string calldata,
         address _vaultAddress,
         uint256 _initialCreditsPerToken
-    ) external {
+    ) external onlyGovernor {
         require(vaultAddress == address(0), "Already initialized");
         require(_rebasingCreditsPerToken == 0, "Already initialized");
         _rebasingCreditsPerToken = _initialCreditsPerToken;
