@@ -259,21 +259,26 @@ contract OUSD is Governable {
     }
 
     function _adjustAccount(address account, int256 balanceChange) internal returns (int256 rebasingCreditsDiff, int256 nonRebasingSupplyDiff) {
+        RebaseOptions state = rebaseState[account];
         int256 currentBalance = int256(balanceOf(account));
-        int256 newBalance = currentBalance + balanceChange;
+        uint256 newBalance = uint256(int256(currentBalance) + int256(balanceChange));
         if(newBalance < 0){
             revert("Transfer amount exceeds balance"); // Should never trigger
         }
+        if (state == RebaseOptions.YieldDelegationTarget) {
+            newBalance += aintMoney[account];
+        }
+
         if(_isNonRebasingAccount(account)){
             nonRebasingSupplyDiff = balanceChange;
             if(nonRebasingCreditsPerToken[account]!=1e27){
                 nonRebasingCreditsPerToken[account] = 1e27;
             }
-            _creditBalances[account] = uint256(newBalance) * 1e9;
+            _creditBalances[account] = newBalance * 1e9;
         } else {
-            int256 newCredits = ((newBalance) * int256(_rebasingCreditsPerToken) + 1e18 - 1) / 1e18;
-            rebasingCreditsDiff = newCredits - int256(_creditBalances[account]);
-            _creditBalances[account] = uint256(newCredits);
+            uint256 newCredits = _balanceToRebasingCredits(newBalance);
+            rebasingCreditsDiff = int256(newCredits) - int256(_creditBalances[account]);
+            _creditBalances[account] = newCredits;
         }
     }
 
@@ -484,6 +489,12 @@ contract OUSD is Governable {
         }
     }
 
+    function _balanceToRebasingCredits(uint256 balance) internal view returns (uint256) {
+        // Rounds up, because we need to ensure that accounts allways have
+        // at least the balance that they should have.
+        return ((balance) * _rebasingCreditsPerToken + 1e18 - 1) / 1e18;
+    }
+
     /**
      * @notice Enable rebasing for an account.
      * @dev Add a contract address to the non-rebasing exception list. The
@@ -510,37 +521,36 @@ contract OUSD is Governable {
 
     function _rebaseOptIn(address _account) internal {
         require(_isNonRebasingAccount(_account), "Account has not opted out");
+
         uint256 balance = balanceOf(msg.sender);
-        (int256 beforeRebasingCreditsDiff, int256 beforeNonRebasingSupplyDiff) 
-            = _adjustAccount(msg.sender, -int256(balance));
-
-        nonRebasingCreditsPerToken[msg.sender] = 0;
+        
+        // Acount
         rebaseState[msg.sender] = RebaseOptions.OptIn;
+        nonRebasingCreditsPerToken[msg.sender] = 0;
+        _creditBalances[msg.sender] = _balanceToRebasingCredits(balance);
 
-        (int256 afterRebasingCreditsDiff, int256 afterNonRebasingSupplyDiff) 
-            = _adjustAccount(msg.sender, int256(balance));
-        _adjustGlobals(
-            beforeRebasingCreditsDiff - afterRebasingCreditsDiff,
-            beforeNonRebasingSupplyDiff - afterNonRebasingSupplyDiff 
-        );
+        // Globals
+        nonRebasingSupply -= balance;
+        _rebasingCredits += _creditBalances[msg.sender];
+
         emit AccountRebasingEnabled(_account);
     }
 
     function rebaseOptOut() public nonReentrant {
         require(!_isNonRebasingAccount(msg.sender), "Account has not opted in");
+        
+        uint256 oldCredits = _creditBalances[msg.sender];
         uint256 balance = balanceOf(msg.sender);
-        (int256 beforeRebasingCreditsDiff, int256 beforeNonRebasingSupplyDiff) 
-            = _adjustAccount(msg.sender, -int256(balance));
-
-        nonRebasingCreditsPerToken[msg.sender] = 1e27;
+        
+        // Acount
         rebaseState[msg.sender] = RebaseOptions.OptOut;
+        nonRebasingCreditsPerToken[msg.sender] = 1e27;
+        _creditBalances[msg.sender] = balance * 1e9;
 
-        (int256 afterRebasingCreditsDiff, int256 afterNonRebasingSupplyDiff) 
-            = _adjustAccount(msg.sender, int256(balance));
-        _adjustGlobals(
-            afterRebasingCreditsDiff - beforeRebasingCreditsDiff,
-            afterNonRebasingSupplyDiff - beforeNonRebasingSupplyDiff
-        );
+        // Globals
+        nonRebasingSupply += balance;
+        _rebasingCredits -= oldCredits;
+
         emit AccountRebasingDisabled(msg.sender);
     }
 
@@ -599,7 +609,14 @@ contract OUSD is Governable {
         yieldFrom[to] = from;
         rebaseState[from] = RebaseOptions.YieldDelegationSource;
         rebaseState[to] = RebaseOptions.YieldDelegationTarget;
-        // Todo: accounting changes
+        
+        uint256 fromAmount = balanceOf(from);
+        nonRebasingSupply -= fromAmount;
+        aintMoney[to] = fromAmount;
+        (int256 rebasingCreditsDiff, int256 nonRebasingSupplyDiff) 
+            = _adjustAccount(to, int256(fromAmount));
+        _adjustGlobals(rebasingCreditsDiff, nonRebasingSupplyDiff);
+
     }
 
     function undelegateYield(address from) external onlyGovernor() {

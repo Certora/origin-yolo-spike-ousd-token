@@ -8,11 +8,11 @@ contract CounterTest is Test {
     OUSD public ousd;
 
     address public matt = makeAddr("Matt");
-    address public labs = makeAddr("NonRebasing");
+    address public nonrebasing = makeAddr("NonRebasing");
     address public pool = makeAddr("Pool");
     address public collector = makeAddr("Collector");
     address public attacker = makeAddr("Attacker");
-    address[] accounts = [matt, attacker, labs, pool, collector];
+    address[] accounts = [matt, attacker, nonrebasing, pool, collector];
 
     function setUp() public {
         ousd = new OUSD();
@@ -20,13 +20,13 @@ contract CounterTest is Test {
 
         ousd.mint(matt, 1000 ether);
         assertEq(ousd.totalSupply(), 1000 ether);
-        ousd.mint(labs, 1000 ether);
+        ousd.mint(nonrebasing, 1000 ether);
         ousd.mint(pool, 1000 ether);
         ousd.mint(collector, 1000 ether);
         ousd.mint(attacker, 1000 ether);
         assertEq(ousd.totalSupply(), 5000 ether);
 
-        vm.prank(labs);
+        vm.prank(nonrebasing);
         ousd.rebaseOptOut();
 
         vm.prank(pool);
@@ -36,19 +36,59 @@ contract CounterTest is Test {
         ousd.rebaseOptOut();
         vm.prank(collector);
         ousd.rebaseOptIn();
+        
 
         assertEq(ousd.nonRebasingSupply(), 2000 ether);
         ousd.delegateYield(pool, collector);
-        assertEq(ousd.nonRebasingSupply(), 1000 ether, "delegate should decrease rebasing");
+        assertEq(ousd.nonRebasingSupply(), 1000 ether, "delegate should decrease nonrebasing");
         assertEq(ousd.totalSupply(), 5000 ether);
+        assertEq(ousd.balanceOf(pool), 1000 ether);
+        assertEq(ousd.balanceOf(collector), 1000 ether);
+    }
+
+    function _show() internal {
+        console.log("  ..totalSupply: ", ousd.totalSupply());
+        console.log("  ..nonRebasingSupply: ", ousd.nonRebasingSupply());
+        console.log("  ..rebasingCredits: ", ousd.rebasingCreditsHighres());
+        console.log("  ..rebasingCreditsPerToken: ", ousd.rebasingCreditsPerTokenHighres());
     }
 
     function test_ChangeSupply() public {
-        assertEq(ousd.totalSupply(), 6000 ether);
+        assertEq(ousd.totalSupply(), 5000 ether);
         assertEq(ousd.nonRebasingSupply(), 1000 ether);
         ousd.changeSupply(7000 ether);
         assertEq(ousd.totalSupply(), 7000 ether);
         assertEq(ousd.nonRebasingSupply(), 1000 ether);
+    }
+
+    function test_SimpleRebasingCredits() public {
+        // Create an OUSD with a very simple credits to token ratio.
+        // This doesn't test rouding, but does make for nice human readable numbers
+        // to check the directions of things
+
+        ousd = new OUSD();
+        ousd.initialize("", "", address(this), 1e27 / 2);
+
+        ousd.mint(matt, 1000 ether);
+        assertEq(ousd.rebasingCredits(), 500 ether);
+        
+        ousd.mint(nonrebasing, 1000 ether);
+        assertEq(ousd.rebasingCredits(), 1000 ether);        
+
+        vm.prank(nonrebasing);
+        ousd.rebaseOptOut();
+        assertEq(ousd.rebasingCredits(), 500 ether, "rebaseOptOut should reducing total rebasing credits");
+
+        ousd.burn(matt, 500 ether);
+        assertEq(ousd.rebasingCredits(), 250 ether, "rebasing burn should reduce rebasing credits");
+
+        ousd.burn(nonrebasing, 500 ether);
+        assertEq(ousd.rebasingCredits(), 250 ether);
+
+        // Add yield
+        assertEq(ousd.balanceOf(matt), 500 ether, "matt should have 500 OUSD");
+        ousd.changeSupply(2000 ether);
+        assertEq(ousd.balanceOf(matt), 1500 ether, "all yield should go to matt");
     }
 
     function test_CanDelegateYield() public {
@@ -80,8 +120,12 @@ contract CounterTest is Test {
 
     function testDelegateYield() public {
         
+        console.log(ousd.totalSupply()/1e18);
+        console.log(ousd.balanceOf(matt)*1/1e18);
+        
         ousd.changeSupply(ousd.totalSupply() + 1000 ether);
-        assertEq(ousd.balanceOf(matt), 100);
+        assertEq(ousd.balanceOf(matt), 1250 ether);
+        assertEq(ousd.balanceOf(collector), 1500 ether, "Collecter should have earned both yields");
         
     }
 
