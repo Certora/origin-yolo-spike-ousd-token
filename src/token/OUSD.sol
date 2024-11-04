@@ -433,33 +433,10 @@ contract OUSD is Governable {
      */
     function _isNonRebasingAccount(address _account) internal returns (bool) {
         bool isContract = _account.code.length > 0;
-        if (isContract && rebaseState[_account] == RebaseOptions.NotSet) {
-            _ensureNonRebasingMigration(_account);
+        if (isContract && rebaseState[_account] == RebaseOptions.NotSet && nonRebasingCreditsPerToken[_account] != 0) {
+            _rebaseOptOut(msg.sender);
         }
         return nonRebasingCreditsPerToken[_account] > 0;
-    }
-
-    /**
-     * @dev If this is the first time a contract has been seen, migrate it to
-     *      non-rebasing accounting.
-     */
-    function _ensureNonRebasingMigration(address _account) internal {
-        if (nonRebasingCreditsPerToken[_account] != 0) {
-            return; // Account is already non-rebasing
-        }
-        uint256 oldCredits = _creditBalances[_account];
-        uint256 balance = balanceOf(_account);
-
-        // Account
-        rebaseState[_account] = RebaseOptions.OptOut;
-        _creditBalances[_account] = balance;
-        nonRebasingCreditsPerToken[_account] = 1e18;
-        
-        // Global
-        nonRebasingSupply += balance;
-        _rebasingCredits -= oldCredits;
-
-        emit AccountRebasingDisabled(_account);
     }
 
     function _balanceToRebasingCredits(uint256 balance) internal view returns (uint256) {
@@ -513,22 +490,26 @@ contract OUSD is Governable {
     }
 
     function rebaseOptOut() public nonReentrant {
-        require(!_isNonRebasingAccount(msg.sender), "Account has not opted in");
-        require(rebaseState[msg.sender] != RebaseOptions.YieldDelegationSource, "Cannot opt out while receiving yield");
+        _rebaseOptOut(msg.sender);
+    }
+
+    function _rebaseOptOut(address _account) internal {
+        require(!_isNonRebasingAccount(_account), "Account has not opted in");
+        require(rebaseState[_account] != RebaseOptions.YieldDelegationSource, "Cannot opt out while receiving yield");
         
-        uint256 oldCredits = _creditBalances[msg.sender];
-        uint256 balance = balanceOf(msg.sender);
+        uint256 oldCredits = _creditBalances[_account];
+        uint256 balance = balanceOf(_account);
         
         // Account
-        rebaseState[msg.sender] = RebaseOptions.OptOut;
-        nonRebasingCreditsPerToken[msg.sender] = 1e18;
-        _creditBalances[msg.sender] = balance;
+        rebaseState[_account] = RebaseOptions.OptOut;
+        nonRebasingCreditsPerToken[_account] = 1e18;
+        _creditBalances[_account] = balance;
 
         // Globals
         nonRebasingSupply += balance;
         _rebasingCredits -= oldCredits;
 
-        emit AccountRebasingDisabled(msg.sender);
+        emit AccountRebasingDisabled(_account);
     }
 
     /**
