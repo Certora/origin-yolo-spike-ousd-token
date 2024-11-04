@@ -484,29 +484,29 @@ contract OUSD is Governable {
      *      supply is updated following deployment of frozen yield change.
      */
     function _ensureRebasingMigration(address _account) internal {
-        // Todo: integrate, deduplicate
-        if (nonRebasingCreditsPerToken[_account] == 0) {
-            emit AccountRebasingDisabled(_account);
-            if (_creditBalances[_account] == 0) {
-                // Since there is no existing balance, we can directly set to
-                // high resolution, and do not have to do any other bookkeeping
-                nonRebasingCreditsPerToken[_account] = 1e18;
-            } else {
-                // Migrate an existing account:
-
-                // Set fixed credits per token for this account
-                nonRebasingCreditsPerToken[_account] = _rebasingCreditsPerToken;
-                // Update non rebasing supply
-                nonRebasingSupply = nonRebasingSupply + balanceOf(_account);
-                // Update credit tallies
-                _rebasingCredits = _rebasingCredits - _creditBalances[_account];
-            }
+        if (nonRebasingCreditsPerToken[_account] != 0) {
+            return; // Account is already non-rebasing
         }
+        uint256 oldCredits = _creditBalances[_account];
+        uint256 balance = credits * _rebasingCreditsPerToken;
+
+        // Local
+        rebaseState[account] = RebaseOptions.OptOut;
+        _creditBalances[_account] = balance;
+        nonRebasingCreditsPerToken[_account] = 1e18;
+        
+        // Global
+        nonRebasingSupply += balance;
+        _rebasingCredits -= oldCredits;
+
+        emit AccountRebasingDisabled(_account);
     }
 
     function _balanceToRebasingCredits(uint256 balance) internal view returns (uint256) {
         // Rounds up, because we need to ensure that accounts allways have
         // at least the balance that they should have.
+        // Note this should always be used on an absolute account balance,
+        // not on a possibly negative diff, because then the rounding would be wrong.
         return ((balance) * _rebasingCreditsPerToken + 1e18 - 1) / 1e18;
     }
 
