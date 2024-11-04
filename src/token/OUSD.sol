@@ -198,10 +198,6 @@ contract OUSD is Governable {
         returns (bool)
     {
         require(_to != address(0), "Transfer to zero address");
-        require(
-            _value <= balanceOf(msg.sender),
-            "Transfer greater than balance"
-        );
 
         _executeTransfer(msg.sender, _to, _value);
 
@@ -222,7 +218,6 @@ contract OUSD is Governable {
         uint256 _value
     ) public returns (bool) {
         require(_to != address(0), "Transfer to zero address");
-        require(_value <= balanceOf(_from), "Transfer greater than balance");
 
         _allowances[_from][msg.sender] = _allowances[_from][msg.sender] - _value;
 
@@ -264,7 +259,7 @@ contract OUSD is Governable {
         int256 currentBalance = int256(balanceOf(account));
         uint256 newBalance = uint256(int256(currentBalance) + int256(balanceChange));
         if(newBalance < 0){
-            revert("Transfer amount exceeds balance"); // Should never trigger
+            revert("Transfer amount exceeds balance");
         }
         if (state == RebaseOptions.YieldDelegationSource) {
             address target = yieldTo[account];
