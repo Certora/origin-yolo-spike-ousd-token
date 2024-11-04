@@ -64,16 +64,16 @@ contract OUSD is Governable {
         vaultAddress = _vaultAddress;
     }
 
+    function symbol() external pure returns (string memory) {
+        return "OUSD";
+    }
+
     function name() external pure returns (string memory) {
         return "Origin Dollar";
     }
 
     function decimals() external pure returns (uint8) {
         return 18;
-    }
-
-    function symbol() external pure returns (string memory) {
-        return "OUSD";
     }
 
     /**
@@ -92,24 +92,17 @@ contract OUSD is Governable {
     }
 
     /**
-     * @return Low resolution rebasingCreditsPerToken
-     */
-    function rebasingCreditsPerToken() public view returns (uint256) {
-        return _rebasingCreditsPerToken / RESOLUTION_INCREASE;
-    }
-
-    /**
-     * @return Low resolution total number of rebasing credits
-     */
-    function rebasingCredits() public view returns (uint256) {
-        return _rebasingCredits / RESOLUTION_INCREASE;
-    }
-
-    /**
      * @return High resolution rebasingCreditsPerToken
      */
     function rebasingCreditsPerTokenHighres() public view returns (uint256) {
         return _rebasingCreditsPerToken;
+    }
+
+    /**
+     * @return Low resolution rebasingCreditsPerToken
+     */
+    function rebasingCreditsPerToken() public view returns (uint256) {
+        return _rebasingCreditsPerToken / RESOLUTION_INCREASE;
     }
 
     /**
@@ -119,6 +112,13 @@ contract OUSD is Governable {
         return _rebasingCredits;
     }
 
+    /**
+     * @return Low resolution total number of rebasing credits
+     */
+    function rebasingCredits() public view returns (uint256) {
+        return _rebasingCredits / RESOLUTION_INCREASE;
+    }
+    
     /**
      * @dev Gets the balance of the specified address.
      * @param _account Address to query the balance of.
