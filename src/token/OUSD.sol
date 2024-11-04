@@ -435,16 +435,16 @@ contract OUSD is Governable {
     function _isNonRebasingAccount(address _account) internal returns (bool) {
         bool isContract = _account.code.length > 0;
         if (isContract && rebaseState[_account] == RebaseOptions.NotSet) {
-            _ensureRebasingMigration(_account);
+            _ensureNonRebasingMigration(_account);
         }
         return nonRebasingCreditsPerToken[_account] > 0;
     }
 
     /**
-     * @dev Ensures internal account for rebasing and non-rebasing credits and
-     *      supply is updated following deployment of frozen yield change.
+     * @dev If this is the first time a contract has been seen, migrate it to
+     *      non-rebasing accounting.
      */
-    function _ensureRebasingMigration(address _account) internal {
+    function _ensureNonRebasingMigration(address _account) internal {
         if (nonRebasingCreditsPerToken[_account] != 0) {
             return; // Account is already non-rebasing
         }
@@ -497,6 +497,7 @@ contract OUSD is Governable {
 
     function _rebaseOptIn(address _account) internal {
         require(_isNonRebasingAccount(_account), "Account has not opted out");
+        require(rebaseState[msg.sender] != RebaseOptions.YieldDelegationTarget, "Cannot opt in while yield delegating");
 
         uint256 balance = balanceOf(msg.sender);
         
@@ -514,6 +515,7 @@ contract OUSD is Governable {
 
     function rebaseOptOut() public nonReentrant {
         require(!_isNonRebasingAccount(msg.sender), "Account has not opted in");
+        require(rebaseState[msg.sender] != RebaseOptions.YieldDelegationSource, "Cannot opt out while receiving yield");
         
         uint256 oldCredits = _creditBalances[msg.sender];
         uint256 balance = balanceOf(msg.sender);
