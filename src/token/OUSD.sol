@@ -350,45 +350,6 @@ contract OUSD is Governable {
     }
 
     /**
-     * @dev Increase the amount of tokens that an owner has allowed to
-     *      `_spender`.
-     *      This method should be used instead of approve() to avoid the double
-     *      approval vulnerability described above.
-     * @param _spender The address which will spend the funds.
-     * @param _addedValue The amount of tokens to increase the allowance by.
-     */
-    function increaseAllowance(address _spender, uint256 _addedValue)
-        public
-        returns (bool)
-    {
-        _allowances[msg.sender][_spender] = _allowances[msg.sender][_spender]
-            + _addedValue;
-        emit Approval(msg.sender, _spender, _allowances[msg.sender][_spender]);
-        return true;
-    }
-
-    /**
-     * @dev Decrease the amount of tokens that an owner has allowed to
-            `_spender`.
-     * @param _spender The address which will spend the funds.
-     * @param _subtractedValue The amount of tokens to decrease the allowance
-     *        by.
-     */
-    function decreaseAllowance(address _spender, uint256 _subtractedValue)
-        public
-        returns (bool)
-    {
-        uint256 oldValue = _allowances[msg.sender][_spender];
-        if (_subtractedValue >= oldValue) {
-            _allowances[msg.sender][_spender] = 0;
-        } else {
-            _allowances[msg.sender][_spender] = oldValue - _subtractedValue;
-        }
-        emit Approval(msg.sender, _spender, _allowances[msg.sender][_spender]);
-        return true;
-    }
-
-    /**
      * @dev Mints new tokens, increasing totalSupply.
      */
     function mint(address _account, uint256 _amount) external onlyVault {
