@@ -488,10 +488,10 @@ contract OUSD is Governable {
             return; // Account is already non-rebasing
         }
         uint256 oldCredits = _creditBalances[_account];
-        uint256 balance = credits * _rebasingCreditsPerToken;
+        uint256 balance = balanceOf(_account);
 
         // Local
-        rebaseState[account] = RebaseOptions.OptOut;
+        rebaseState[_account] = RebaseOptions.OptOut;
         _creditBalances[_account] = balance;
         nonRebasingCreditsPerToken[_account] = 1e18;
         
@@ -505,7 +505,7 @@ contract OUSD is Governable {
     function _balanceToRebasingCredits(uint256 balance) internal view returns (uint256) {
         // Rounds up, because we need to ensure that accounts allways have
         // at least the balance that they should have.
-        // Note this should always be used on an absolute account balance,
+        // Note this should always be used on an absolute account value,
         // not on a possibly negative diff, because then the rounding would be wrong.
         return ((balance) * _rebasingCreditsPerToken + 1e18 - 1) / 1e18;
     }
