@@ -41,11 +41,9 @@ contract OUSD is Governable {
     mapping(address => mapping(address => uint256)) private _allowances;
     address public vaultAddress = address(0);
     mapping(address => uint256) private _creditBalances;
-    uint256 private _rebasingCredits;
+    uint256 private _rebasingCredits; // Sum of all rebasing credits (_creditBalances for rebasing accounts)
     uint256 private _rebasingCreditsPerToken;
-    // Frozen address/credits are non rebasing (value is held in contracts which
-    // do not receive yield unless they explicitly opt in)
-    uint256 public nonRebasingSupply;
+    uint256 public nonRebasingSupply;  // All nonrebasing balances
     mapping(address => uint256) public nonRebasingCreditsPerToken;
     mapping(address => RebaseOptions) public rebaseState;
     mapping(address => uint256) public isUpgraded;
@@ -285,7 +283,7 @@ contract OUSD is Governable {
                 nonRebasingCreditsPerToken[account] = 1e18;
             }
             _creditBalances[account] = newBalance;
-            
+
         } else {
             uint256 newCredits = _balanceToRebasingCredits(newBalance);
             rebasingCreditsDiff = int256(newCredits) - int256(_creditBalances[account]);
@@ -572,7 +570,7 @@ contract OUSD is Governable {
         );
     }
 
-    function delegateYield(address from, address to) external onlyGovernor() {
+    function delegateYield(address from, address to) external onlyGovernor nonReentrant() {
         require(from != to, "Cannot delegate to self");
         require(
             yieldFrom[to] == address(0) 
@@ -600,7 +598,7 @@ contract OUSD is Governable {
         _rebasingCredits += credits;
     }
 
-    function undelegateYield(address from) external onlyGovernor() {
+    function undelegateYield(address from) external onlyGovernor nonReentrant() {
         require(yieldTo[from] != address(0), "");
         address to = yieldTo[from];
         uint256 fromBalance = balanceOf(from);
