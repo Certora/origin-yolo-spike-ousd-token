@@ -285,6 +285,7 @@ contract OUSD is Governable {
                 nonRebasingCreditsPerToken[account] = 1e18;
             }
             _creditBalances[account] = newBalance;
+            
         } else {
             uint256 newCredits = _balanceToRebasingCredits(newBalance);
             rebasingCreditsDiff = int256(newCredits) - int256(_creditBalances[account]);
@@ -295,13 +296,13 @@ contract OUSD is Governable {
     function _adjustGlobals(int256 rebasingCreditsDiff, int256 nonRebasingSupplyDiff) internal {
         if(rebasingCreditsDiff !=0){
             if (uint256(int256(_rebasingCredits) + rebasingCreditsDiff) < 0){
-                revert("underflow");
+                revert("rebasingCredits underflow");
             }
             _rebasingCredits = uint256(int256(_rebasingCredits) + rebasingCreditsDiff);
         }
         if(nonRebasingSupplyDiff !=0){
             if (int256(nonRebasingSupply) + nonRebasingSupplyDiff < 0){
-                revert("underflow");
+                revert("nonRebasingSupply underflow");
             }
             nonRebasingSupply = uint256(int256(nonRebasingSupply) + nonRebasingSupplyDiff);
         }
@@ -364,8 +365,10 @@ contract OUSD is Governable {
     function _mint(address _account, uint256 _amount) internal nonReentrant {
         require(_account != address(0), "Mint to the zero address");
 
+        // Account
         (int256 toRebasingCreditsDiff, int256 toNonRebasingSupplyDiff) 
             = _adjustAccount(_account, int256(_amount));
+        // Globals
         _adjustGlobals(toRebasingCreditsDiff, toNonRebasingSupplyDiff);
         _totalSupply = _totalSupply + _amount;
 
@@ -397,8 +400,10 @@ contract OUSD is Governable {
             return;
         }
 
+        // Account
         (int256 toRebasingCreditsDiff, int256 toNonRebasingSupplyDiff) 
             = _adjustAccount(_account, -int256(_amount));
+        // Globals
         _adjustGlobals(toRebasingCreditsDiff, toNonRebasingSupplyDiff);
         _totalSupply = _totalSupply - _amount;
 
@@ -446,7 +451,7 @@ contract OUSD is Governable {
         uint256 oldCredits = _creditBalances[_account];
         uint256 balance = balanceOf(_account);
 
-        // Local
+        // Account
         rebaseState[_account] = RebaseOptions.OptOut;
         _creditBalances[_account] = balance;
         nonRebasingCreditsPerToken[_account] = 1e18;
@@ -496,7 +501,7 @@ contract OUSD is Governable {
 
         uint256 balance = balanceOf(msg.sender);
         
-        // Acount
+        // Account
         rebaseState[msg.sender] = RebaseOptions.OptIn;
         nonRebasingCreditsPerToken[msg.sender] = 0;
         _creditBalances[msg.sender] = _balanceToRebasingCredits(balance);
@@ -515,7 +520,7 @@ contract OUSD is Governable {
         uint256 oldCredits = _creditBalances[msg.sender];
         uint256 balance = balanceOf(msg.sender);
         
-        // Acount
+        // Account
         rebaseState[msg.sender] = RebaseOptions.OptOut;
         nonRebasingCreditsPerToken[msg.sender] = 1e18;
         _creditBalances[msg.sender] = balance;
