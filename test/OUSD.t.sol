@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {OUSD} from "../src/token/OUSD.sol";
 
-contract CounterTest is Test {
+contract OUSDTest is Test {
     OUSD public ousd;
 
     address public matt = makeAddr("Matt");
@@ -12,7 +12,8 @@ contract CounterTest is Test {
     address public pool = makeAddr("Pool");
     address public collector = makeAddr("Collector");
     address public attacker = makeAddr("Attacker");
-    address[] accounts = [matt, attacker, nonrebasing, pool, collector];
+    address[] accounts = [matt, nonrebasing, pool, collector, attacker];
+    address[] accountsEachType = [matt, nonrebasing, pool, collector, attacker];
 
     function setUp() public {
         ousd = new OUSD();
@@ -174,17 +175,19 @@ contract CounterTest is Test {
     }
 
     function test_Transfers() external {
-        for (uint256 i = 0; i < accounts.length; i++) {
-            for (uint256 j = 0; j < accounts.length; j++) {
-                console.log("Transferring from ", accounts[i], " to ", accounts[j]);
-                address from = accounts[i];
-                address to = accounts[j];
+        for (uint256 i = 0; i < accountsEachType.length; i++) {
+            for (uint256 j = 0; j < accountsEachType.length; j++) {
+                address from = accountsEachType[i];
+                address to = accountsEachType[j];
+                console.log("Transferring from ", vm.getLabel(from), " to ", vm.getLabel(to));
+                
                 uint256 amount = 7 ether + 1231231203815;
                 uint256 fromBefore = ousd.balanceOf(from);
                 uint256 toBefore = ousd.balanceOf(to);
                 uint256 totalSupplyBefore = ousd.totalSupply();
                 vm.prank(from);
                 ousd.transfer(to, amount);
+                vm.snapshotGasLastCall(string(abi.encodePacked("Transfer ", vm.getLabel(from), " -> ", vm.getLabel(to))));
                 if (from == to) {
                     assertEq(ousd.balanceOf(from), fromBefore);
                 } else {

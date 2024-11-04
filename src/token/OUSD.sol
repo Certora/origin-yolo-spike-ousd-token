@@ -130,8 +130,14 @@ contract OUSD is Governable {
         view
         returns (uint256)
     {
+        RebaseOptions state = rebaseState[_account];
+        if(state == RebaseOptions.YieldDelegationSource){
+            // Saves a slot read when transfering to or from a yield delegating source
+            // since we know creditBalances equals the balance.
+            return _creditBalances[_account];
+        }
         uint256 baseBalance = _creditBalances[_account] * 1e18 / _creditsPerToken(_account);
-        if (rebaseState[_account] == RebaseOptions.YieldDelegationTarget) {
+        if (state == RebaseOptions.YieldDelegationTarget) {
             return baseBalance - _creditBalances[yieldFrom[_account]];
         }
         return baseBalance;
@@ -267,10 +273,7 @@ contract OUSD is Governable {
 
             _creditBalances[account] = newBalance;
             _creditBalances[target] = targetNewCredits;
-            
-            if(nonRebasingCreditsPerToken[account]!=1e18){ // Todo, should be removeable
-                nonRebasingCreditsPerToken[account] = 1e18;
-            }
+            nonRebasingCreditsPerToken[account] = 1e18;
 
         } else if (state == RebaseOptions.YieldDelegationTarget) {
             uint256 newCredits = _balanceToRebasingCredits(newBalance + _creditBalances[yieldFrom[account]]);
@@ -279,9 +282,7 @@ contract OUSD is Governable {
 
         } else if(_isNonRebasingAccount(account)){
             nonRebasingSupplyDiff = balanceChange;
-            if(nonRebasingCreditsPerToken[account]!=1e18){
-                nonRebasingCreditsPerToken[account] = 1e18;
-            }
+            nonRebasingCreditsPerToken[account] = 1e18;
             _creditBalances[account] = newBalance;
 
         } else {
