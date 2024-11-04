@@ -51,7 +51,6 @@ contract OUSD is Governable {
     mapping(address => uint256) public isUpgraded;
     mapping(address => address) public yieldTo;
     mapping(address => address) public yieldFrom;
-    mapping(address => uint256) public aintMoney;
 
     uint256 private constant RESOLUTION_INCREASE = 1e9;
 
@@ -133,9 +132,11 @@ contract OUSD is Governable {
         view
         returns (uint256)
     {
-        return
-            _creditBalances[_account] * 1e18 / _creditsPerToken(_account) 
-            - aintMoney[_account];
+        uint256 baseBalance = _creditBalances[_account] * 1e18 / _creditsPerToken(_account);
+        if (rebaseState[_account] == RebaseOptions.YieldDelegationTarget) {
+            return baseBalance - _creditBalances[yieldFrom[_account]];
+        }
+        return baseBalance;
     }
 
     /**
@@ -265,16 +266,30 @@ contract OUSD is Governable {
         if(newBalance < 0){
             revert("Transfer amount exceeds balance"); // Should never trigger
         }
-        if (state == RebaseOptions.YieldDelegationTarget) {
-            newBalance += aintMoney[account];
-        }
+        if (state == RebaseOptions.YieldDelegationSource) {
+            address target = yieldTo[account];
+            uint256 targetPrevBalance = balanceOf(target);
+            uint256 targetNewCredits = _balanceToRebasingCredits(targetPrevBalance + newBalance);
+            rebasingCreditsDiff = int256(targetNewCredits) - int256(_creditBalances[target]);
 
-        if(_isNonRebasingAccount(account)){
-            nonRebasingSupplyDiff = balanceChange;
-            if(nonRebasingCreditsPerToken[account]!=1e27){
-                nonRebasingCreditsPerToken[account] = 1e27;
+            _creditBalances[account] = newBalance;
+            _creditBalances[target] = targetNewCredits;
+            
+            if(nonRebasingCreditsPerToken[account]!=1e18){ // Todo, should be removeable
+                nonRebasingCreditsPerToken[account] = 1e18;
             }
-            _creditBalances[account] = newBalance * 1e9;
+
+        } else if (state == RebaseOptions.YieldDelegationTarget) {
+            uint256 newCredits = _balanceToRebasingCredits(newBalance + _creditBalances[yieldFrom[account]]);
+            rebasingCreditsDiff = int256(newCredits) - int256(_creditBalances[account]);
+            _creditBalances[account] = newCredits;
+
+        } else if(_isNonRebasingAccount(account)){
+            nonRebasingSupplyDiff = balanceChange;
+            if(nonRebasingCreditsPerToken[account]!=1e18){
+                nonRebasingCreditsPerToken[account] = 1e18;
+            }
+            _creditBalances[account] = newBalance;
         } else {
             uint256 newCredits = _balanceToRebasingCredits(newBalance);
             rebasingCreditsDiff = int256(newCredits) - int256(_creditBalances[account]);
@@ -475,7 +490,7 @@ contract OUSD is Governable {
             if (_creditBalances[_account] == 0) {
                 // Since there is no existing balance, we can directly set to
                 // high resolution, and do not have to do any other bookkeeping
-                nonRebasingCreditsPerToken[_account] = 1e27;
+                nonRebasingCreditsPerToken[_account] = 1e18;
             } else {
                 // Migrate an existing account:
 
@@ -544,8 +559,8 @@ contract OUSD is Governable {
         
         // Acount
         rebaseState[msg.sender] = RebaseOptions.OptOut;
-        nonRebasingCreditsPerToken[msg.sender] = 1e27;
-        _creditBalances[msg.sender] = balance * 1e9;
+        nonRebasingCreditsPerToken[msg.sender] = 1e18;
+        _creditBalances[msg.sender] = balance;
 
         // Globals
         nonRebasingSupply += balance;
@@ -604,25 +619,43 @@ contract OUSD is Governable {
             , "Blocked by existing yield delegation");
         require(!_isNonRebasingAccount(to), "Must delegate to a rebasing account");
         require(_isNonRebasingAccount(from), "Must delegate from a non-rebasing account");
+        // Todo, tighter scope on above checks, partucularly the state
         
         yieldTo[from] = to;
         yieldFrom[to] = from;
         rebaseState[from] = RebaseOptions.YieldDelegationSource;
         rebaseState[to] = RebaseOptions.YieldDelegationTarget;
-        
-        uint256 fromAmount = balanceOf(from);
-        nonRebasingSupply -= fromAmount;
-        aintMoney[to] = fromAmount;
-        (int256 rebasingCreditsDiff, int256 nonRebasingSupplyDiff) 
-            = _adjustAccount(to, int256(fromAmount));
-        _adjustGlobals(rebasingCreditsDiff, nonRebasingSupplyDiff);
 
+        uint256 balance = balanceOf(from);
+        uint256 credits = _balanceToRebasingCredits(balance);
+        // Local
+        _creditBalances[from] = balance;
+        _creditBalances[to] += credits;
+
+        // Global
+        nonRebasingSupply -= balance;
+        _rebasingCredits += credits;
     }
 
     function undelegateYield(address from) external onlyGovernor() {
         require(yieldTo[from] != address(0), "");
+        address to = yieldTo[from];
+        uint256 fromBalance = balanceOf(from);
+        uint256 toBalance = balanceOf(to);
+        uint256 toCreditsBefore = _creditBalances[to];
+        uint256 toNewCredits = _balanceToRebasingCredits(toBalance);
+        
         yieldFrom[yieldTo[from]] = address(0);
         yieldTo[from] = address(0);
-        // Todo: change rebase state
+        rebaseState[from] = RebaseOptions.OptOut;
+        _creditBalances[from] = fromBalance;
+        nonRebasingCreditsPerToken[from] = 1e18;
+        
+        rebaseState[to] = RebaseOptions.OptIn;
+        _creditBalances[to] = toNewCredits;
+        nonRebasingCreditsPerToken[to] = 0; // Should be non-needed
+
+        nonRebasingSupply += fromBalance;
+        _rebasingCredits -= (toCreditsBefore - toNewCredits); // Should always go down or stay the same
     }
 }

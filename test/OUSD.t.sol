@@ -39,11 +39,13 @@ contract CounterTest is Test {
         
 
         assertEq(ousd.nonRebasingSupply(), 2000 ether);
+        assertEq(ousd.balanceOf(collector), 1000 ether, "Collector should be unchanged after rebaseOptIn");
+        console.log("-> DelegateYield");
         ousd.delegateYield(pool, collector);
         assertEq(ousd.nonRebasingSupply(), 1000 ether, "delegate should decrease nonrebasing");
         assertEq(ousd.totalSupply(), 5000 ether);
-        assertEq(ousd.balanceOf(pool), 1000 ether);
-        assertEq(ousd.balanceOf(collector), 1000 ether);
+        assertEq(ousd.balanceOf(pool), 1000 ether, "Pool balance should be unchanged");
+        assertEq(ousd.balanceOf(collector), 1000 ether, "Collector should be unchanged after delegate");
     }
 
     function _show() internal {
@@ -51,6 +53,10 @@ contract CounterTest is Test {
         console.log("  ..nonRebasingSupply: ", ousd.nonRebasingSupply());
         console.log("  ..rebasingCredits: ", ousd.rebasingCreditsHighres());
         console.log("  ..rebasingCreditsPerToken: ", ousd.rebasingCreditsPerTokenHighres());
+        console.log("  ..expectedRebasingBalance: ", ousd.rebasingCreditsHighres()/ousd.rebasingCreditsPerTokenHighres());
+        console.log("  ....POOL:", ousd.balanceOf(pool));
+        console.log("  ....COLLECTOR:", ousd.balanceOf(collector));
+        console.log("  ....MATT:", ousd.balanceOf(matt));
     }
 
     function test_ChangeSupply() public {
@@ -119,13 +125,51 @@ contract CounterTest is Test {
     }
 
     function testDelegateYield() public {
+        console.log("testDelegateYield");
+        _show();
         
-        console.log(ousd.totalSupply()/1e18);
-        console.log(ousd.balanceOf(matt)*1/1e18);
+        console.log("Supply Up, first");
+        ousd.changeSupply(ousd.totalSupply() + 2000 ether);
+        _show();
+        assertEq(ousd.balanceOf(matt), 1500 ether);
+        assertEq(ousd.balanceOf(pool), 1000 ether);
+        assertEq(ousd.balanceOf(collector), 2000 ether, "Collecter should have earned both yields");
+        assertEq(ousd.nonRebasingSupply(), 1000 ether);
+
+        console.log("Transfer 1500 to pool");
+        vm.prank(matt);
+        ousd.transfer(pool, 1000 ether);
+        _show();
+        assertEq(ousd.balanceOf(matt), 500 ether);
+        assertEq(ousd.balanceOf(pool), 2000 ether, "pool should have 1500 + 1000");
+        assertEq(ousd.balanceOf(collector), 2000 ether, "collector should not increase on transfer to pool");
+        assertEq(ousd.nonRebasingSupply(), 1000 ether, "Non rebasing supply");
         
-        ousd.changeSupply(ousd.totalSupply() + 1000 ether);
-        assertEq(ousd.balanceOf(matt), 1250 ether);
-        assertEq(ousd.balanceOf(collector), 1500 ether, "Collecter should have earned both yields");
+        console.log("Change supply");
+        assertEq(ousd.nonRebasingSupply(), 1000 ether, "Non rebasing supply");
+        ousd.changeSupply(ousd.totalSupply() + 3000 ether);
+        _show();
+        assertEq(ousd.balanceOf(pool), 2000 ether);
+        assertEq(ousd.balanceOf(collector), 4000 ether);
+
+        console.log("Remove delegation");
+        ousd.undelegateYield(pool);
+        _show();
+        assertEq(ousd.balanceOf(pool), 2000 ether);
+        assertEq(ousd.balanceOf(collector), 4000 ether);
+
+        console.log("Transfer from collector");
+        vm.prank(collector);
+        ousd.transfer(nonrebasing, 1000 ether);
+        _show();
+        assertEq(ousd.balanceOf(collector), 3000 ether);
+
+        console.log("Change supply");
+        assertEq(ousd.nonRebasingSupply(), 4000 ether, "Non rebasing supply");
+        ousd.changeSupply(ousd.totalSupply() + 3000 ether);
+        _show();
+        assertEq(ousd.balanceOf(pool), 2000 ether);
+        assertEq(ousd.balanceOf(collector), 4500 ether);
         
     }
 
