@@ -118,7 +118,7 @@ contract OUSD is Governable {
     function rebasingCredits() public view returns (uint256) {
         return _rebasingCredits / RESOLUTION_INCREASE;
     }
-    
+
     /**
      * @dev Gets the balance of the specified address.
      * @param _account Address to query the balance of.
@@ -557,6 +557,7 @@ contract OUSD is Governable {
         require(_isNonRebasingAccount(from), "Must delegate from a non-rebasing account");
         // Todo, tighter scope on above checks, partucularly the state
         
+        // Set up the bidirectional links
         yieldTo[from] = to;
         yieldFrom[to] = from;
         rebaseState[from] = RebaseOptions.YieldDelegationSource;
@@ -564,8 +565,10 @@ contract OUSD is Governable {
 
         uint256 balance = balanceOf(from);
         uint256 credits = _balanceToRebasingCredits(balance);
+
         // Local
         _creditBalances[from] = balance;
+        nonRebasingCreditsPerToken[from] = 1e18;
         _creditBalances[to] += credits;
 
         // Global
@@ -581,16 +584,19 @@ contract OUSD is Governable {
         uint256 toCreditsBefore = _creditBalances[to];
         uint256 toNewCredits = _balanceToRebasingCredits(toBalance);
         
+        // Set up the bidirectional links
         yieldFrom[yieldTo[from]] = address(0);
         yieldTo[from] = address(0);
         rebaseState[from] = RebaseOptions.OptOut;
+        rebaseState[to] = RebaseOptions.OptIn;
+
+        // Local
         _creditBalances[from] = fromBalance;
         nonRebasingCreditsPerToken[from] = 1e18;
-        
-        rebaseState[to] = RebaseOptions.OptIn;
         _creditBalances[to] = toNewCredits;
-        nonRebasingCreditsPerToken[to] = 0; // Should be non-needed
+        nonRebasingCreditsPerToken[to] = 0; // Should be not be needed
 
+        // Global
         nonRebasingSupply += fromBalance;
         _rebasingCredits -= (toCreditsBefore - toNewCredits); // Should always go down or stay the same
     }
