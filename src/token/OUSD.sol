@@ -465,7 +465,7 @@ contract OUSD is Governable {
     }
 
     function _rebaseOptIn(address _account) internal {
-        require(_isNonRebasingAccount(_account), "Account has not opted out");
+        require(nonRebasingCreditsPerToken[_account] != 0, "Account has not opted out");
         require(rebaseState[msg.sender] != RebaseOptions.YieldDelegationTarget, "Cannot opt in while yield delegating");
 
         uint256 balance = balanceOf(msg.sender);
@@ -487,7 +487,7 @@ contract OUSD is Governable {
     }
 
     function _rebaseOptOut(address _account) internal {
-        require(!_isNonRebasingAccount(_account), "Account has not opted in");
+        require(nonRebasingCreditsPerToken[_account] == 0, "Account has not opted in");
         require(rebaseState[_account] != RebaseOptions.YieldDelegationSource, "Cannot opt out while receiving yield");
         
         uint256 oldCredits = _creditBalances[_account];
@@ -553,9 +553,10 @@ contract OUSD is Governable {
             && yieldFrom[from] == address(0)
             && yieldTo[from] == address(0)
             , "Blocked by existing yield delegation");
-        require(!_isNonRebasingAccount(to), "Must delegate to a rebasing account");
-        require(_isNonRebasingAccount(from), "Must delegate from a non-rebasing account");
-        // Todo, tighter scope on above checks, partucularly the state
+        RebaseOptions stateFrom = rebaseState[from];
+        RebaseOptions stateTo = rebaseState[to];
+        require(_isNonRebasingAccount(from) && (stateFrom == RebaseOptions.NotSet || stateFrom == RebaseOptions.OptOut), "Must delegate from a non-rebasing account");
+        require(!_isNonRebasingAccount(to) && (stateTo == RebaseOptions.NotSet || stateTo == RebaseOptions.OptIn), "Must delegate to a rebasing account");
         
         // Set up the bidirectional links
         yieldTo[from] = to;
@@ -577,7 +578,8 @@ contract OUSD is Governable {
     }
 
     function undelegateYield(address from) external onlyGovernor nonReentrant() {
-        require(yieldTo[from] != address(0), "");
+        require(yieldTo[from] != address(0), ""); // Can only be set if a valid delegation was created
+
         address to = yieldTo[from];
         uint256 fromBalance = balanceOf(from);
         uint256 toBalance = balanceOf(to);
