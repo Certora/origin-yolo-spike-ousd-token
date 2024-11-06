@@ -44,7 +44,7 @@ contract OUSD is Governable {
     uint256 private _rebasingCredits; // Sum of all rebasing credits (_creditBalances for rebasing accounts)
     uint256 private _rebasingCreditsPerToken;
     uint256 public nonRebasingSupply;  // All nonrebasing balances
-    mapping(address => uint256) public nonRebasingCreditsPerToken;
+    mapping(address => uint256) private alternativeCreditsPerToken;
     mapping(address => RebaseOptions) public rebaseState;
     mapping(address => uint256) public isUpgraded;
     mapping(address => address) public yieldTo;
@@ -191,6 +191,10 @@ contract OUSD is Governable {
         );
     }
 
+    function nonRebasingCreditsPerToken(address _account) external view returns (uint256) {
+        return alternativeCreditsPerToken[_account];
+    }
+
     /**
      * @dev Transfer tokens to a specified address.
      * @param _to the address to transfer to.
@@ -273,7 +277,7 @@ contract OUSD is Governable {
 
             _creditBalances[account] = newBalance;
             _creditBalances[target] = targetNewCredits;
-            nonRebasingCreditsPerToken[account] = 1e18;
+            alternativeCreditsPerToken[account] = 1e18;
 
         } else if (state == RebaseOptions.YieldDelegationTarget) {
             uint256 newCredits = _balanceToRebasingCredits(newBalance + _creditBalances[yieldFrom[account]]);
@@ -282,7 +286,7 @@ contract OUSD is Governable {
 
         } else if(_isNonRebasingAccount(account)){
             nonRebasingSupplyDiff = balanceChange;
-            nonRebasingCreditsPerToken[account] = 1e18;
+            alternativeCreditsPerToken[account] = 1e18;
             _creditBalances[account] = newBalance;
 
         } else {
@@ -412,8 +416,8 @@ contract OUSD is Governable {
         view
         returns (uint256)
     {
-        if (nonRebasingCreditsPerToken[_account] != 0) {
-            return nonRebasingCreditsPerToken[_account];
+        if (alternativeCreditsPerToken[_account] != 0) {
+            return alternativeCreditsPerToken[_account];
         } else {
             return _rebasingCreditsPerToken;
         }
@@ -426,10 +430,10 @@ contract OUSD is Governable {
      */
     function _isNonRebasingAccount(address _account) internal returns (bool) {
         bool isContract = _account.code.length > 0;
-        if (isContract && rebaseState[_account] == RebaseOptions.NotSet && nonRebasingCreditsPerToken[_account] != 0) {
+        if (isContract && rebaseState[_account] == RebaseOptions.NotSet && alternativeCreditsPerToken[_account] != 0) {
             _rebaseOptOut(msg.sender);
         }
-        return nonRebasingCreditsPerToken[_account] > 0;
+        return alternativeCreditsPerToken[_account] > 0;
     }
 
     function _balanceToRebasingCredits(uint256 balance) internal view returns (uint256) {
@@ -465,14 +469,14 @@ contract OUSD is Governable {
     }
 
     function _rebaseOptIn(address _account) internal {
-        require(nonRebasingCreditsPerToken[_account] != 0, "Account has not opted out");
+        require(alternativeCreditsPerToken[_account] != 0, "Account has not opted out");
         require(rebaseState[msg.sender] != RebaseOptions.YieldDelegationTarget, "Cannot opt in while yield delegating");
 
         uint256 balance = balanceOf(msg.sender);
         
         // Account
         rebaseState[msg.sender] = RebaseOptions.OptIn;
-        nonRebasingCreditsPerToken[msg.sender] = 0;
+        alternativeCreditsPerToken[msg.sender] = 0;
         _creditBalances[msg.sender] = _balanceToRebasingCredits(balance);
 
         // Globals
@@ -487,7 +491,7 @@ contract OUSD is Governable {
     }
 
     function _rebaseOptOut(address _account) internal {
-        require(nonRebasingCreditsPerToken[_account] == 0, "Account has not opted in");
+        require(alternativeCreditsPerToken[_account] == 0, "Account has not opted in");
         require(rebaseState[_account] != RebaseOptions.YieldDelegationSource, "Cannot opt out while receiving yield");
         
         uint256 oldCredits = _creditBalances[_account];
@@ -495,7 +499,7 @@ contract OUSD is Governable {
         
         // Account
         rebaseState[_account] = RebaseOptions.OptOut;
-        nonRebasingCreditsPerToken[_account] = 1e18;
+        alternativeCreditsPerToken[_account] = 1e18;
         _creditBalances[_account] = balance;
 
         // Globals
@@ -569,7 +573,7 @@ contract OUSD is Governable {
 
         // Local
         _creditBalances[from] = balance;
-        nonRebasingCreditsPerToken[from] = 1e18;
+        alternativeCreditsPerToken[from] = 1e18;
         _creditBalances[to] += credits;
 
         // Global
@@ -594,9 +598,9 @@ contract OUSD is Governable {
 
         // Local
         _creditBalances[from] = fromBalance;
-        nonRebasingCreditsPerToken[from] = 1e18;
+        alternativeCreditsPerToken[from] = 1e18;
         _creditBalances[to] = toNewCredits;
-        nonRebasingCreditsPerToken[to] = 0; // Should be not be needed
+        alternativeCreditsPerToken[to] = 0; // Should be not be needed
 
         // Global
         nonRebasingSupply += fromBalance;
