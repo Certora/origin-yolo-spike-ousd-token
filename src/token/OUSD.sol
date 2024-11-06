@@ -30,8 +30,8 @@ contract OUSD is Governable {
 
     enum RebaseOptions {
         NotSet,
-        OptOut,
-        OptIn,
+        StdNonRebasing,
+        StdRebasing,
         YieldDelegationSource,
         YieldDelegationTarget
     }
@@ -191,6 +191,7 @@ contract OUSD is Governable {
         );
     }
 
+    // Backwards compatible view
     function nonRebasingCreditsPerToken(address _account) external view returns (uint256) {
         return alternativeCreditsPerToken[_account];
     }
@@ -475,7 +476,7 @@ contract OUSD is Governable {
         uint256 balance = balanceOf(msg.sender);
         
         // Account
-        rebaseState[msg.sender] = RebaseOptions.OptIn;
+        rebaseState[msg.sender] = RebaseOptions.StdRebasing;
         alternativeCreditsPerToken[msg.sender] = 0;
         _creditBalances[msg.sender] = _balanceToRebasingCredits(balance);
 
@@ -498,7 +499,7 @@ contract OUSD is Governable {
         uint256 balance = balanceOf(_account);
         
         // Account
-        rebaseState[_account] = RebaseOptions.OptOut;
+        rebaseState[_account] = RebaseOptions.StdNonRebasing;
         alternativeCreditsPerToken[_account] = 1e18;
         _creditBalances[_account] = balance;
 
@@ -559,8 +560,8 @@ contract OUSD is Governable {
             , "Blocked by existing yield delegation");
         RebaseOptions stateFrom = rebaseState[from];
         RebaseOptions stateTo = rebaseState[to];
-        require(_isNonRebasingAccount(from) && (stateFrom == RebaseOptions.NotSet || stateFrom == RebaseOptions.OptOut), "Must delegate from a non-rebasing account");
-        require(!_isNonRebasingAccount(to) && (stateTo == RebaseOptions.NotSet || stateTo == RebaseOptions.OptIn), "Must delegate to a rebasing account");
+        require(_isNonRebasingAccount(from) && (stateFrom == RebaseOptions.NotSet || stateFrom == RebaseOptions.StdNonRebasing), "Must delegate from a non-rebasing account");
+        require(!_isNonRebasingAccount(to) && (stateTo == RebaseOptions.NotSet || stateTo == RebaseOptions.StdRebasing), "Must delegate to a rebasing account");
         
         // Set up the bidirectional links
         yieldTo[from] = to;
@@ -593,8 +594,8 @@ contract OUSD is Governable {
         // Set up the bidirectional links
         yieldFrom[yieldTo[from]] = address(0);
         yieldTo[from] = address(0);
-        rebaseState[from] = RebaseOptions.OptOut;
-        rebaseState[to] = RebaseOptions.OptIn;
+        rebaseState[from] = RebaseOptions.StdNonRebasing;
+        rebaseState[to] = RebaseOptions.StdRebasing;
 
         // Local
         _creditBalances[from] = fromBalance;
