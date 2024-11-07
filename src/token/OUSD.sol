@@ -272,8 +272,8 @@ contract OUSD is Governable {
         }
         if (state == RebaseOptions.YieldDelegationSource) {
             address target = yieldTo[account];
-            uint256 targetPrevBalance = balanceOf(target);
-            uint256 targetNewCredits = _balanceToRebasingCredits(targetPrevBalance + newBalance);
+            uint256 targetOldBalance = balanceOf(target);
+            uint256 targetNewCredits = _balanceToRebasingCredits(targetOldBalance + newBalance);
             rebasingCreditsDiff = int256(targetNewCredits) - int256(_creditBalances[target]);
 
             _creditBalances[account] = newBalance;
@@ -470,8 +470,9 @@ contract OUSD is Governable {
     }
 
     function _rebaseOptIn(address _account) internal {
-        require(alternativeCreditsPerToken[_account] != 0, "Account has not opted out");
-        require(rebaseState[msg.sender] != RebaseOptions.YieldDelegationTarget, "Cannot opt in while yield delegating");
+        require(alternativeCreditsPerToken[_account] != 0, "Account must be non-rebasing");
+        RebaseOptions state = rebaseState[_account];
+        require(state == RebaseOptions.StdNonRebasing || state == RebaseOptions.NotSet, "Only standard non-rebasing accounts can opt out");
 
         uint256 balance = balanceOf(msg.sender);
         
@@ -492,8 +493,9 @@ contract OUSD is Governable {
     }
 
     function _rebaseOptOut(address _account) internal {
-        require(alternativeCreditsPerToken[_account] == 0, "Account has not opted in");
-        require(rebaseState[_account] != RebaseOptions.YieldDelegationSource, "Cannot opt out while receiving yield");
+        require(alternativeCreditsPerToken[_account] == 0, "Account must be rebasing");
+        RebaseOptions state = rebaseState[_account];
+        require(state == RebaseOptions.StdRebasing || state == RebaseOptions.NotSet, "Only standard rebasing accounts can opt out");
         
         uint256 oldCredits = _creditBalances[_account];
         uint256 balance = balanceOf(_account);
@@ -583,7 +585,8 @@ contract OUSD is Governable {
     }
 
     function undelegateYield(address from) external onlyGovernor nonReentrant() {
-        require(yieldTo[from] != address(0), ""); // Can only be set if a valid delegation was created
+        // Require a delegation, which will also ensure a vaild delegation
+        require(yieldTo[from] != address(0), ""); 
 
         address to = yieldTo[from];
         uint256 fromBalance = balanceOf(from);
@@ -591,7 +594,7 @@ contract OUSD is Governable {
         uint256 toCreditsBefore = _creditBalances[to];
         uint256 toNewCredits = _balanceToRebasingCredits(toBalance);
         
-        // Set up the bidirectional links
+        // Remove the bidirectional links
         yieldFrom[yieldTo[from]] = address(0);
         yieldTo[from] = address(0);
         rebaseState[from] = RebaseOptions.StdNonRebasing;
